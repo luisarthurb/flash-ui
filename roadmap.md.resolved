@@ -1,0 +1,149 @@
+# 🚀 Flash UI — Product Roadmap
+
+> **Menu Flash**: AI-powered restaurant menu editor & printer.
+> Current state: React + Vite + Gemini AI, generates 3 menu variations from text, supports inline editing. No backend, no auth, single-page only.
+
+---
+
+## Phase 1 — Fix Print & Paper Sizes 🖨️
+**Priority:** 🔴 Critical | **Effort:** ~1 day
+
+| # | Task | Details |
+|---|------|---------|
+| 1.1 | **Fix Print PDF** | Current `iframe.contentWindow.print()` doesn't generate an editable PDF. Replace with a proper PDF library (`html2pdf.js` or `jsPDF` + `html2canvas`) that produces a real downloadable PDF file |
+| 1.2 | **Paper Size Selector** | Add a dropdown (A3, A4, A5, Letter, Custom) that constrains the design canvas and sets `@page { size: ... }` in the generated CSS |
+| 1.3 | **Print Preview Modal** | Before printing, open a full-screen preview showing exact page breaks and margins so users see what they'll get |
+| 1.4 | **Image Sizing per Paper** | Auto-scale images proportionally based on selected paper size — large hero images for A3, compact thumbnails for A5 |
+
+---
+
+## Phase 2 — Visual Editor & Element Control 🎨
+**Priority:** 🔴 Critical | **Effort:** ~3 days
+
+| # | Task | Details |
+|---|------|---------|
+| 2.1 | **DOM Element Tree Panel** | A collapsible side panel showing the HTML structure as a visual tree. Each node shows its tag, a snippet of text, and icons for move/delete |
+| 2.2 | **Drag & Drop Reordering** | Click-and-drag elements within the tree panel or directly on the canvas to reorder sections (categories, items, headers, images) |
+| 2.3 | **Delete Elements** | Hover any element → show a red ✕ button to remove it from the menu |
+| 2.4 | **Add New Elements** | Toolbar with "Add" buttons: **Text Block**, **Image**, **Divider**, **Category Header**, **Menu Item Row** — inserts at the cursor position |
+| 2.5 | **Logo Upload** | Dedicated "Add Logo" button that places a logo image at the top of the menu, with drag-to-resize handles |
+| 2.6 | **Image Management** | Replace, resize, or remove any image. Support upload from file, paste from clipboard, or enter a URL. Image aspect-ratio controls per paper size |
+
+---
+
+## Phase 3 — Multi-Page Menus 📄
+**Priority:** 🟠 High | **Effort:** ~2 days
+
+| # | Task | Details |
+|---|------|---------|
+| 3.1 | **Page Model** | Refactor data model: each Project has multiple Pages, each Page has its own HTML content and page number |
+| 3.2 | **Page Navigator** | Horizontal page thumbnail strip at the bottom. Click to switch pages, drag to reorder |
+| 3.3 | **Add/Remove Pages** | "+" button to add a blank page or duplicate current page. "×" to delete a page with confirmation |
+| 3.4 | **Multi-Page PDF Export** | When printing, combine all pages in order into a single PDF document with proper page breaks |
+| 3.5 | **Consistent Structure** | All pages inherit the project's color palette, fonts, and styling. Editing a style on one page optionally propagates to all |
+
+---
+
+## Phase 4 — Projects & Persistence 💾
+**Priority:** 🟠 High | **Effort:** ~2-3 days
+
+| # | Task | Details |
+|---|------|---------|
+| 4.1 | **Backend Setup** | Add Supabase project with database for users, projects, and pages |
+| 4.2 | **Project CRUD** | Create, rename, duplicate, and delete menu projects. Each project stores: name, paper size, color palette, font, pages[] |
+| 4.3 | **Auto-Save** | Debounced auto-save — every edit persists to the database within 2 seconds |
+| 4.4 | **Projects Dashboard** | A "My Projects" page with grid/list view of saved menus, showing thumbnails, last-edited dates, and quick actions |
+| 4.5 | **Export Options** | Download as PDF, or export raw HTML/CSS for custom printing |
+
+---
+
+## Phase 5 — Authentication & Accounts 🔐
+**Priority:** 🟠 High | **Effort:** ~1 day
+
+| # | Task | Details |
+|---|------|---------|
+| 5.1 | **Supabase Auth** | Email/password + Google OAuth login. Protected routes for dashboard and editor |
+| 5.2 | **Admin Account** | Pre-seed your account (`luisarthur.bertho@gmail.com`) as admin with full access for testing |
+| 5.3 | **User Profiles** | Basic profile page with avatar, display name, and email |
+| 5.4 | **Role-Based Access** | Admin can see all users' projects (for support). Regular users see only their own |
+
+---
+
+## Phase 6 — Add Products/Items Management 🍕
+**Priority:** 🟡 Medium | **Effort:** ~2 days
+
+| # | Task | Details |
+|---|------|---------|
+| 6.1 | **Product Data Model** | Each menu item becomes a structured object: `{ name, description, price, image, category }` instead of raw HTML text |
+| 6.2 | **Product Editor Panel** | Side panel form to add/edit products with fields for name, description, price, and image upload |
+| 6.3 | **Category Management** | Create, rename, reorder categories. Drag products between categories |
+| 6.4 | **Live Sync** | Adding/removing/editing a product immediately re-renders the menu canvas while preserving the design template |
+| 6.5 | **Bulk Import** | Import products from CSV/Excel (building on current paste-text functionality) |
+
+---
+
+## Phase 7 — AI Mockup Generator 🤖
+**Priority:** 🟢 Future | **Effort:** ~3-4 days
+
+| # | Task | Details |
+|---|------|---------|
+| 7.1 | **Brand Description Input** | A form where users describe their restaurant's brand: cuisine type, ambiance, colors, logo style, target audience |
+| 7.2 | **AI Design Generation** | Use Gemini to generate complete menu mockups that match the described branding — not just colors/fonts but full layout concepts |
+| 7.3 | **Reference Image Matching** | Upload a photo of your restaurant, business card, or existing branding → AI generates a menu design that visually matches |
+| 7.4 | **Mockup Presentation View** | Show the generated menu in photorealistic mockup contexts: on a table, held by a hand, in a menu holder, framed on a wall |
+| 7.5 | **Iterate with AI Chat** | After generating, refine via chat: "Make it more rustic", "Add more whitespace", "Change to a dark theme" — AI adjusts the existing design |
+
+---
+
+## Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Phase 1-3: Frontend"
+        A[Landing / Prompt Input] --> B[AI Generation Engine]
+        B --> C[Menu Canvas Editor]
+        C --> D[Visual Editor Panel]
+        C --> E[Multi-Page Navigator]
+        C --> F[Print / PDF Export]
+    end
+
+    subgraph "Phase 4-5: Backend"
+        G[Supabase Auth] --> H[User Accounts]
+        H --> I[Projects Database]
+        I --> J[Auto-Save Service]
+    end
+
+    subgraph "Phase 6: Data"
+        K[Product Manager] --> C
+        K --> L[Category Manager]
+    end
+
+    subgraph "Phase 7: AI"
+        M[Brand Input] --> N[AI Mockup Generator]
+        N --> C
+        O[AI Chat Refinement] --> C
+    end
+
+    C --> G
+    J --> I
+```
+
+---
+
+## Execution Order Summary
+
+| Phase | What | When | Depends On |
+|-------|------|------|------------|
+| **1** | Fix Print + Paper Sizes | **Now** | Nothing |
+| **2** | Visual Editor | **Next** | Phase 1 |
+| **3** | Multi-Page | After Phase 2 | Phase 2 |
+| **4** | Projects & Save | After Phase 3 | Phase 3 |
+| **5** | Auth & Login | With Phase 4 | Phase 4 |
+| **6** | Product Management | After Phase 5 | Phase 2, 4 |
+| **7** | AI Mockups | Last | Phase 5, 6 |
+
+> [!TIP]
+> Phases 4 & 5 (Backend + Auth) can be built in parallel since they both involve Supabase setup.
+
+> [!IMPORTANT]
+> Phase 1 (Print fix) should be done **immediately** — it's a broken core feature. Everything else builds on having reliable PDF output.
