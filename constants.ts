@@ -137,44 +137,83 @@ export const INJECTED_EDITOR_SCRIPT = `
     // 2. Image Editing Logic
     // ============================================================
     var imgToolbar = null;
+    var activeImg = null;
+    var imgDirty = false;
     document.addEventListener('click', function(e) {
         if (imgToolbar && !imgToolbar.contains(e.target) && e.target.tagName !== 'IMG') {
-            imgToolbar.remove(); imgToolbar = null;
+            imgToolbar.remove(); imgToolbar = null; activeImg = null;
+            if (imgDirty) { imgDirty = false; syncHtmlBack(); }
         }
         if (e.target.tagName === 'IMG') {
             e.preventDefault(); e.stopPropagation();
             if (imgToolbar) imgToolbar.remove();
+            activeImg = e.target;
             var img = e.target;
             var rect = img.getBoundingClientRect();
             imgToolbar = document.createElement('div');
-            imgToolbar.innerHTML = '<button id="btn-ai-edit" style="padding:6px 12px;background:linear-gradient(135deg,#4285f4,#9b59b6);color:white;border:none;border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:bold;">\\u2728 AI Edit</button>'
-                + '<div style="width:1px;height:16px;background:rgba(255,255,255,0.2);margin:0 4px;"></div>'
-                + '<button id="btn-link" style="padding:6px 12px;background:transparent;color:#ccc;border:none;border-radius:4px;cursor:pointer;font-size:12px;">\\ud83d\\udd17 Link</button>'
-                + '<button id="btn-upload" style="padding:6px 12px;background:transparent;color:#ccc;border:none;border-radius:4px;cursor:pointer;font-size:12px;">\\ud83d\\udcc2 Upload</button>';
-            imgToolbar.style.cssText = 'position:fixed;top:' + (rect.top + 10) + 'px;left:' + (rect.right - 220) + 'px;display:flex;gap:4px;align-items:center;background:rgba(0,0,0,0.9);padding:6px;border-radius:8px;backdrop-filter:blur(8px);z-index:10000;box-shadow:0 4px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);animation:fadeIn 0.2s ease;';
-            if (rect.right - 220 < 0) imgToolbar.style.left = (rect.left + 10) + 'px';
+
+            var curW = img.offsetWidth;
+            imgToolbar.innerHTML =
+                '<button id="btn-shrink" title="Diminuir" style="padding:4px 10px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:4px;cursor:pointer;font-size:16px;font-weight:bold;line-height:1;">−</button>' +
+                '<span id="img-size-label" style="color:#aaa;font-size:11px;min-width:40px;text-align:center;">' + curW + 'px</span>' +
+                '<button id="btn-grow" title="Aumentar" style="padding:4px 10px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:4px;cursor:pointer;font-size:16px;font-weight:bold;line-height:1;">+</button>' +
+                '<div style="width:1px;height:16px;background:rgba(255,255,255,0.2);margin:0 2px;"></div>' +
+                '<button id="btn-upload" title="Trocar imagem" style="padding:4px 10px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">\\ud83d\\udcc2</button>' +
+                '<button id="btn-link" title="URL da imagem" style="padding:4px 10px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px;">\\ud83d\\udd17</button>';
+
+            imgToolbar.style.cssText = 'position:fixed;top:' + (rect.top - 40) + 'px;left:' + (rect.left + rect.width / 2 - 130) + 'px;display:flex;gap:4px;align-items:center;background:rgba(0,0,0,0.92);padding:5px 8px;border-radius:8px;backdrop-filter:blur(8px);z-index:10000;box-shadow:0 4px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.15);animation:fadeIn 0.2s ease;';
+            // Keep toolbar in viewport
+            if (rect.top - 40 < 5) imgToolbar.style.top = (rect.bottom + 6) + 'px';
+            if (rect.left + rect.width / 2 - 130 < 5) imgToolbar.style.left = '5px';
             document.body.appendChild(imgToolbar);
 
-            imgToolbar.querySelector('#btn-ai-edit').onclick = function() {
-                var p = prompt("How should AI edit this product?");
-                if (p) {
-                    img.style.opacity = '0.5'; img.style.filter = 'grayscale(100%) blur(2px)'; img.style.transition = 'all 0.5s';
-                    window.parent.postMessage({ type: 'AI_IMAGE_EDIT', prompt: p, src: img.src }, '*');
-                    imgToolbar.remove(); imgToolbar = null;
-                }
+            // Resize: shrink (−)
+            imgToolbar.querySelector('#btn-shrink').onclick = function(ev) {
+                ev.stopPropagation();
+                var w = activeImg.offsetWidth;
+                var newW = Math.max(30, Math.round(w * 0.8));
+                activeImg.style.width = newW + 'px';
+                activeImg.style.height = 'auto';
+                document.getElementById('img-size-label').textContent = newW + 'px';
+                imgDirty = true;
             };
-            imgToolbar.querySelector('#btn-link').onclick = function() {
-                var u = prompt('Image URL:', img.src);
-                if (u) img.src = u;
-                imgToolbar.remove(); imgToolbar = null;
+            // Resize: grow (+)
+            imgToolbar.querySelector('#btn-grow').onclick = function(ev) {
+                ev.stopPropagation();
+                var w = activeImg.offsetWidth;
+                var newW = Math.round(w * 1.2);
+                activeImg.style.width = newW + 'px';
+                activeImg.style.height = 'auto';
+                document.getElementById('img-size-label').textContent = newW + 'px';
+                imgDirty = true;
             };
-            imgToolbar.querySelector('#btn-upload').onclick = function() {
+            // Upload: replace image from file
+            imgToolbar.querySelector('#btn-upload').onclick = function(ev) {
+                ev.stopPropagation();
                 var f = document.createElement('input'); f.type = 'file'; f.accept = 'image/*';
-                f.onchange = function(ev) {
-                    var file = ev.target.files[0];
-                    if (file) { var r = new FileReader(); r.onload = function(re) { img.src = re.target.result; }; r.readAsDataURL(file); }
+                f.onchange = function(fev) {
+                    var file = fev.target.files[0];
+                    if (file) {
+                        var reader = new FileReader();
+                        reader.onload = function(re) {
+                            activeImg.src = re.target.result;
+                            syncHtmlBack();
+                        };
+                        reader.readAsDataURL(file);
+                    }
                 };
-                f.click(); imgToolbar.remove(); imgToolbar = null;
+                f.click();
+                // Don't remove toolbar — let user see it still
+            };
+            // Link: change image URL
+            imgToolbar.querySelector('#btn-link').onclick = function(ev) {
+                ev.stopPropagation();
+                var u = prompt('URL da imagem:', activeImg.src);
+                if (u && u.trim()) {
+                    activeImg.src = u.trim();
+                    syncHtmlBack();
+                }
+                imgToolbar.remove(); imgToolbar = null; activeImg = null;
             };
         }
     });
