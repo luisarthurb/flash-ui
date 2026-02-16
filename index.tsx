@@ -519,11 +519,27 @@ Required JSON Output Format (stream ONE object per line):
         if (!selectedElementInfo || !instruction.trim() || isEditingElement) return;
         setIsEditingElement(true);
         setInputValue('');
+        const imageToUse = selectedImage;
+        if (imageToUse) setSelectedImage(null);
 
         try {
             const apiKey = process.env.API_KEY;
             if (!apiKey) throw new Error('API_KEY is not configured.');
             const ai = new GoogleGenAI({ apiKey });
+
+            const contentParts: any[] = [];
+
+            // If user attached an image (e.g., their logo), include it
+            if (imageToUse) {
+                const base64Data = imageToUse.split(',')[1];
+                const mimeMatch = imageToUse.match(/data:([^;]+);/);
+                contentParts.push({
+                    inlineData: {
+                        mimeType: mimeMatch ? mimeMatch[1] : 'image/png',
+                        data: base64Data
+                    }
+                });
+            }
 
             const prompt = `
 You are editing a SPECIFIC element in a restaurant menu HTML document.
@@ -533,7 +549,14 @@ ${selectedElementInfo.html}
 
 **USER INSTRUCTION:**
 "${instruction}"
-
+${imageToUse ? `
+**ATTACHED IMAGE:**
+The user has provided an image (likely their logo or brand image). You MUST:
+- Embed this image using an <img> tag with the EXACT base64 data URL provided below.
+- Use: <img src="${imageToUse}" alt="Logo" style="max-width: 200px; height: auto;" />
+- Position it according to the user's instruction (e.g., "on top", "centered", etc.)
+- Make sure the image is properly sized and integrated with the existing design.
+` : ''}
 **STRICT RULES:**
 1. Return ONLY the edited HTML fragment — no markdown, no code fences, no explanation.
 2. Keep the same general styling (inline styles, classes) unless the user asks to change it.
@@ -544,9 +567,11 @@ ${selectedElementInfo.html}
 7. Return clean HTML that can be directly inserted into the document.
             `.trim();
 
+            contentParts.push({ text: prompt });
+
             const response = await ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
-                contents: { role: 'user', parts: [{ text: prompt }] }
+                contents: { role: 'user', parts: contentParts }
             });
 
             let editedHtml = (response.text || '').trim();
@@ -563,7 +588,7 @@ ${selectedElementInfo.html}
         } finally {
             setIsEditingElement(false);
         }
-    }, [selectedElementInfo, isEditingElement, sendToFocusedIframe]);
+    }, [selectedElementInfo, isEditingElement, sendToFocusedIframe, selectedImage]);
 
     const handleSendMessage = useCallback(async (manualPrompt?: string) => {
         const promptToUse = manualPrompt || inputValue;
