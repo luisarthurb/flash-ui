@@ -374,6 +374,8 @@ export const INJECTED_EDITOR_SCRIPT = `
         if (!el || el === document.body || ['SCRIPT','STYLE'].indexOf(el.tagName) !== -1) return;
         if (dragHandle && selectedEl === el) return;
         removeHandle();
+        // Fix 3: Dismiss image toolbar when showing drag handle
+        if (imgToolbar) { imgToolbar.remove(); imgToolbar = null; }
 
         selectedEl = el;
         el.style.outline = '2px solid rgba(59,130,246,0.5)';
@@ -401,17 +403,24 @@ export const INJECTED_EDITOR_SCRIPT = `
             ev.stopPropagation();
             var currentlyAbs = isAbsolute(selectedEl);
             if (currentlyAbs) {
+                // Switch back to flow
                 selectedEl.style.position = '';
                 selectedEl.style.left = ''; selectedEl.style.top = '';
                 selectedEl.style.transform = '';
                 selectedEl.style.width = '';
                 selectedEl.style.margin = '';
             } else {
+                // Fix 1: Use body-relative coordinates (not viewport)
                 var rect = selectedEl.getBoundingClientRect();
+                var bodyRect = document.body.getBoundingClientRect();
+                // Fix 2: Move to body if nested inside a wrapper
+                if (selectedEl.parentElement !== document.body) {
+                    document.body.appendChild(selectedEl);
+                }
                 selectedEl.style.position = 'absolute';
                 selectedEl.style.width = rect.width + 'px';
-                selectedEl.style.left = (rect.left + (window.scrollX || window.pageXOffset)) + 'px';
-                selectedEl.style.top = (rect.top + (window.scrollY || window.pageYOffset)) + 'px';
+                selectedEl.style.left = (rect.left - bodyRect.left) + 'px';
+                selectedEl.style.top = (rect.top - bodyRect.top) + 'px';
                 selectedEl.style.margin = '0';
             }
             showHandle(selectedEl);
@@ -465,11 +474,21 @@ export const INJECTED_EDITOR_SCRIPT = `
             el.setAttribute('contenteditable', 'false');
         });
 
+        // Fix 5: Hide outline during drag
+        if (selectedEl) { selectedEl.style.outline = 'none'; selectedEl.style.outlineOffset = ''; }
+
         if (dragMode === 'free') {
             initialLeft = parseFloat(selectedEl.style.left || 0);
             initialTop = parseFloat(selectedEl.style.top || 0);
-            if (isNaN(initialLeft)) initialLeft = selectedEl.getBoundingClientRect().left + (window.scrollX || 0);
-            if (isNaN(initialTop)) initialTop = selectedEl.getBoundingClientRect().top + (window.scrollY || 0);
+            // Fix 1: Use body-relative coords for free drag start
+            if (isNaN(initialLeft)) {
+                var bodyR = document.body.getBoundingClientRect();
+                initialLeft = selectedEl.getBoundingClientRect().left - bodyR.left;
+            }
+            if (isNaN(initialTop)) {
+                var bodyR2 = document.body.getBoundingClientRect();
+                initialTop = selectedEl.getBoundingClientRect().top - bodyR2.top;
+            }
         } else {
             ghost = selectedEl.cloneNode(true);
             ghost.className = 'drag-ghost';
@@ -536,9 +555,12 @@ export const INJECTED_EDITOR_SCRIPT = `
                 dropTarget = best;
                 dropPos = isBefore ? 'before' : 'after';
 
+                // Fix 4: Use documentElement scroll for consistent indicator position
+                var scrollT = document.documentElement.scrollTop || document.body.scrollTop || 0;
+                var scrollL = document.documentElement.scrollLeft || document.body.scrollLeft || 0;
                 indicator.style.display = 'block';
-                indicator.style.top = ((window.scrollY || 0) + (isBefore ? r.top : r.bottom)) + 'px';
-                indicator.style.left = ((window.scrollX || 0) + r.left) + 'px';
+                indicator.style.top = (scrollT + (isBefore ? r.top : r.bottom)) + 'px';
+                indicator.style.left = (scrollL + r.left) + 'px';
                 indicator.style.width = r.width + 'px';
             }
         }
@@ -574,6 +596,11 @@ export const INJECTED_EDITOR_SCRIPT = `
         }
 
         dropTarget = null;
+        // Fix 5: Restore outline and handle after drag
+        if (selectedEl) {
+            selectedEl.style.outline = '2px solid rgba(59,130,246,0.5)';
+            selectedEl.style.outlineOffset = '3px';
+        }
         if (dragHandle) dragHandle.style.display = '';
         updateHandlePos();
         syncHtmlBack();
