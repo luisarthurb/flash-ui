@@ -541,7 +541,10 @@ Generate 3 creative, print-ready menu design concepts using the EXACT colors pro
 
 **STRICT RULES:**
 1. Use the EXACT items provided by the user.
-2. If a reference image is provided, let it heavily influence Design 1.
+2. ${selectedImage ? `A REFERENCE IMAGE IS PROVIDED. This is CRITICAL:
+   - Design 1 MUST be an almost EXACT replica of the reference image's layout, typography, spacing, visual hierarchy, and overall composition. Copy the structure faithfully.
+   - Design 2 should be a close variation of the reference, keeping the same spirit but with minor creative differences.
+   - Design 3 can be a more creative interpretation, but still clearly inspired by the reference.` : 'Create 3 distinct, creative design variations.'}
 3. Return ONLY a raw JSON array of 3 descriptive style names (e.g. ["Elegant Serif Layout", "Modern Grid with Photos", "Rustic Paper Texture"]).
         `.trim();
 
@@ -600,7 +603,16 @@ You are a Menu Printing Expert. Generate HTML/CSS for a restaurant menu.
 "${trimmedInput}"
 
 **DESIGN DIRECTION:** ${styleInstruction}
-
+${selectedImage ? `
+**⚠️ REFERENCE IMAGE PROVIDED — THIS IS THE HIGHEST PRIORITY:**
+A reference image has been provided. You MUST closely replicate:
+- The EXACT layout structure (columns, spacing, alignment, positioning)
+- The typography scale and hierarchy (title size, category headers, item text, price alignment)
+- The overall visual composition (where elements are placed on the page)
+- The decorative elements style (illustrations, borders, dividers, logos)
+- The spacing and whitespace patterns
+The generated menu should look like a near-identical twin of the reference image, adapted only for the user's content and colors below.
+` : ''}
 **USER CONSTRAINTS (YOU MUST COMPLY):**
 - **BACKGROUND COLOR:** ${colors.background}
 - **PRIMARY COLOR (Headings/Accents):** ${colors.primary}
