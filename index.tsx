@@ -10,7 +10,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 
 import { Artifact, Session, ComponentVariation, PaperSize } from './types';
-import { INITIAL_PLACEHOLDERS, PALETTE_PRESETS, FONTS, INJECTED_EDITOR_SCRIPT, PAPER_SIZES, DEFAULT_PAPER_SIZE, ITEMS_PER_PAGE_LIMITS } from './constants';
+import { INITIAL_PLACEHOLDERS, PALETTE_PRESETS, FONTS, INJECTED_EDITOR_SCRIPT, PAPER_SIZES, DEFAULT_PAPER_SIZE } from './constants';
 import { generateId } from './utils';
 
 import DottedGlowBackground from './components/DottedGlowBackground';
@@ -18,7 +18,6 @@ import ArtifactCard from './components/ArtifactCard';
 import SideDrawer from './components/SideDrawer';
 import PrintPreviewModal from './components/PrintPreviewModal';
 import ElementTreePanel, { TreeNode } from './components/ElementTreePanel';
-import QuantitySelector from './components/QuantitySelector';
 import HelpOverlay from './components/HelpOverlay';
 import {
     ThinkingIcon,
@@ -72,25 +71,12 @@ function App() {
     const [treeData, setTreeData] = useState<TreeNode[]>([]);
     const [selectedElementPath, setSelectedElementPath] = useState<number[] | null>(null);
 
-    // Items per page state
-    const [itemsPerPage, setItemsPerPage] = useState<number>(
-        ITEMS_PER_PAGE_LIMITS[DEFAULT_PAPER_SIZE.name]?.default || 8
-    );
-
     // Tutorial state
     const [showTutorial, setShowTutorial] = useState(false);
 
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const gridScrollRef = useRef<HTMLDivElement>(null);
-
-    // Auto-clamp itemsPerPage when paper size changes
-    useEffect(() => {
-        const limits = ITEMS_PER_PAGE_LIMITS[selectedPaperSize.name];
-        if (limits) {
-            setItemsPerPage(prev => Math.max(limits.min, Math.min(limits.max, prev)));
-        }
-    }, [selectedPaperSize]);
 
     // Auto-open tutorial on first visit
     useEffect(() => {
@@ -516,8 +502,7 @@ Required JSON Output Format (stream ONE object per line):
             prompt: trimmedInput,
             timestamp: baseTime,
             artifacts: placeholderArtifacts,
-            paperSize: selectedPaperSize,
-            itemsPerPage: itemsPerPage
+            paperSize: selectedPaperSize
         };
 
         setSessions(prev => [...prev, newSession]);
@@ -632,7 +617,6 @@ You are a Menu Printing Expert. Generate HTML/CSS for a restaurant menu.
    - Set \`html, body { width: ${selectedPaperSize.widthPx}px; margin: 0 auto; }\` for exact dimensions.
    - Use high-contrast text for print legibility.
 4. **LAYOUT**: Ensure prices are aligned clearly. Use dots/leaders if it's a list style.
-5. **ITEMS PER PAGE**: The menu MUST display EXACTLY ${itemsPerPage} menu item slots per page. If the user provides fewer items, show empty styled "ghost" placeholder slots with light dashed borders and faded text like "Espaço para Item N...". Strictly enforce this layout grid.
 
 Return ONLY RAW HTML. No markdown.
           `.trim();
@@ -908,13 +892,6 @@ Return ONLY RAW HTML. No markdown.
                             >
                                 {PAPER_SIZES.map(s => <option key={s.name} value={s.name}>📄 {s.name}</option>)}
                             </select>
-
-                            <QuantitySelector
-                                value={itemsPerPage}
-                                onChange={setItemsPerPage}
-                                paperSize={selectedPaperSize}
-                                disabled={isLoading}
-                            />
 
                             <select
                                 className="style-select"

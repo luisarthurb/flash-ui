@@ -25,7 +25,6 @@ export interface Session {
   timestamp: number;
   artifacts: Artifact[];
   paperSize: PaperSize;
-  itemsPerPage: number;
 }
 
 export interface ComponentVariation { name: string; html: string; }
