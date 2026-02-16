@@ -17,6 +17,7 @@ import DottedGlowBackground from './components/DottedGlowBackground';
 import ArtifactCard from './components/ArtifactCard';
 import SideDrawer from './components/SideDrawer';
 import PrintPreviewModal from './components/PrintPreviewModal';
+import ElementTreePanel, { TreeNode } from './components/ElementTreePanel';
 import {
     ThinkingIcon,
     CodeIcon,
@@ -27,7 +28,8 @@ import {
     GridIcon,
     PrinterIcon,
     UploadIcon,
-    ImageIcon
+    ImageIcon,
+    TreeIcon
 } from './components/Icons';
 
 function App() {
@@ -62,6 +64,11 @@ function App() {
     const [componentVariations, setComponentVariations] = useState<ComponentVariation[]>([]);
     const [selectedPaperSize, setSelectedPaperSize] = useState<PaperSize>(DEFAULT_PAPER_SIZE);
     const [printPreviewState, setPrintPreviewState] = useState<{ isOpen: boolean; html: string }>({ isOpen: false, html: '' });
+
+    // Element Tree Panel state
+    const [isTreeOpen, setIsTreeOpen] = useState(false);
+    const [treeData, setTreeData] = useState<TreeNode[]>([]);
+    const [selectedElementPath, setSelectedElementPath] = useState<number[] | null>(null);
 
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -238,14 +245,42 @@ STRICT CONSTRAINT: Keep the main product/subject EXACTLY as it is in the origina
 
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
-            if (event.data && event.data.type === 'AI_IMAGE_EDIT') {
-                const { prompt, src } = event.data;
-                handleImageEdit(prompt, src);
+            if (!event.data || !event.data.type) return;
+            switch (event.data.type) {
+                case 'AI_IMAGE_EDIT': {
+                    const { prompt, src } = event.data;
+                    handleImageEdit(prompt, src);
+                    break;
+                }
+                case 'TREE_DATA': {
+                    setTreeData(event.data.tree || []);
+                    break;
+                }
+                case 'HTML_SYNC': {
+                    // Sync the iframe HTML back to React state
+                    if (focusedArtifactIndex !== null && event.data.html) {
+                        setSessions(prev => prev.map((sess, i) =>
+                            i === currentSessionIndex ? {
+                                ...sess,
+                                artifacts: sess.artifacts.map((art, j) =>
+                                    j === focusedArtifactIndex ? { ...art, html: event.data.html } : art
+                                )
+                            } : sess
+                        ));
+                    }
+                    break;
+                }
+                case 'ELEMENT_CLICKED': {
+                    if (isTreeOpen && event.data.path) {
+                        setSelectedElementPath(event.data.path);
+                    }
+                    break;
+                }
             }
         };
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
-    }, [handleImageEdit]);
+    }, [handleImageEdit, focusedArtifactIndex, currentSessionIndex, isTreeOpen]);
 
 
     const parseJsonStream = async function* (responseStream: AsyncGenerator<{ text: string }>) {
@@ -389,6 +424,45 @@ Required JSON Output Format (stream ONE object per line):
             setDrawerState({ isOpen: true, mode: 'code', title: 'Source Code', data: artifact.html });
         }
     };
+
+    // --- Element Tree Panel Handlers ---
+    const sendToFocusedIframe = useCallback((message: any) => {
+        if (focusedArtifactIndex === null) return;
+        const currentSession = sessions[currentSessionIndex];
+        if (!currentSession) return;
+        const artifact = currentSession.artifacts[focusedArtifactIndex];
+        const iframes = document.querySelectorAll('iframe');
+        iframes.forEach((iframe) => {
+            if (iframe.title === artifact.id && iframe.contentWindow) {
+                iframe.contentWindow.postMessage(message, '*');
+            }
+        });
+    }, [focusedArtifactIndex, sessions, currentSessionIndex]);
+
+    const handleOpenTree = useCallback(() => {
+        setIsTreeOpen(true);
+        setSelectedElementPath(null);
+        // Request tree data from iframe
+        setTimeout(() => sendToFocusedIframe({ type: 'GET_TREE' }), 100);
+    }, [sendToFocusedIframe]);
+
+    const handleTreeSelect = useCallback((path: number[]) => {
+        setSelectedElementPath(path);
+        sendToFocusedIframe({ type: 'SELECT_ELEMENT', path });
+    }, [sendToFocusedIframe]);
+
+    const handleTreeDelete = useCallback((path: number[]) => {
+        sendToFocusedIframe({ type: 'DELETE_ELEMENT', path });
+        setSelectedElementPath(null);
+    }, [sendToFocusedIframe]);
+
+    const handleTreeMove = useCallback((path: number[], direction: 'up' | 'down') => {
+        sendToFocusedIframe({ type: 'MOVE_ELEMENT', path, direction });
+    }, [sendToFocusedIframe]);
+
+    const handleTreeInsert = useCallback((html: string, position: 'top' | 'after', path?: number[]) => {
+        sendToFocusedIframe({ type: 'INSERT_ELEMENT', html, position, path: path || undefined });
+    }, [sendToFocusedIframe]);
 
     const handleSendMessage = useCallback(async (manualPrompt?: string) => {
         const promptToUse = manualPrompt || inputValue;
@@ -647,6 +721,17 @@ Return ONLY RAW HTML. No markdown.
 
     return (
         <>
+            <ElementTreePanel
+                isOpen={isTreeOpen}
+                onClose={() => setIsTreeOpen(false)}
+                treeData={treeData}
+                selectedPath={selectedElementPath}
+                onSelectElement={handleTreeSelect}
+                onDeleteElement={handleTreeDelete}
+                onMoveElement={handleTreeMove}
+                onInsertElement={handleTreeInsert}
+            />
+
             <PrintPreviewModal
                 html={printPreviewState.html}
                 paperSize={currentSession?.paperSize || selectedPaperSize}
@@ -759,6 +844,9 @@ Return ONLY RAW HTML. No markdown.
                         </button>
                         <button onClick={handleShowCode}>
                             <CodeIcon /> Source
+                        </button>
+                        <button onClick={handleOpenTree} className="elements-btn">
+                            <TreeIcon /> Elements
                         </button>
                     </div>
                     <div className="active-prompt-label">

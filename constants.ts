@@ -147,17 +147,10 @@ export const INJECTED_EDITOR_SCRIPT = `
             aiBtn.onclick = () => {
                 const p = prompt("How should AI edit this product? (e.g. 'put it on a marble table', 'add soft morning light')\\n\\nNOTE: The product texture will be preserved.");
                 if(p) {
-                    // Visual feedback
                     img.style.opacity = '0.5';
                     img.style.filter = 'grayscale(100%) blur(2px)';
                     img.style.transition = 'all 0.5s';
-                    
-                    window.parent.postMessage({
-                        type: 'AI_IMAGE_EDIT',
-                        prompt: p,
-                        src: img.src
-                    }, '*');
-                    
+                    window.parent.postMessage({ type: 'AI_IMAGE_EDIT', prompt: p, src: img.src }, '*');
                     imgToolbar.remove();
                     imgToolbar = null;
                 }
@@ -197,10 +190,199 @@ export const INJECTED_EDITOR_SCRIPT = `
         }
     });
 
-    // Add CSS animation for toolbar
+    // Add CSS animation for toolbar + highlight
     const style = document.createElement('style');
-    style.innerHTML = \`@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }\`;
+    style.innerHTML = \`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes elementHighlight {
+            0% { outline: 2px dashed #3b82f6; outline-offset: 2px; }
+            50% { outline: 2px dashed #60a5fa; outline-offset: 4px; }
+            100% { outline: 2px dashed transparent; outline-offset: 2px; }
+        }
+        .tree-highlight { animation: elementHighlight 2s ease forwards; }
+    \`;
     document.head.appendChild(style);
+
+    // ============================================================
+    // 3. Element Tree Communication (postMessage API)
+    // ============================================================
+    const MEANINGFUL_TAGS = new Set(['H1','H2','H3','H4','H5','H6','P','DIV','IMG','HR','SECTION','TABLE','UL','OL','LI','SPAN','A','HEADER','FOOTER','NAV','ARTICLE','MAIN','FIGURE','FIGCAPTION','BLOCKQUOTE','TR','TD','TH','THEAD','TBODY']);
+    const SKIP_IDS = new Set(['floating-toolbar']);
+
+    function getElementPath(el) {
+        const path = [];
+        let node = el;
+        while (node && node !== document.body && node.parentElement) {
+            const parent = node.parentElement;
+            const siblings = Array.from(parent.children);
+            path.unshift(siblings.indexOf(node));
+            node = parent;
+        }
+        return path;
+    }
+
+    function getElementByPath(path) {
+        let el = document.body;
+        for (const idx of path) {
+            if (!el || !el.children || idx >= el.children.length) return null;
+            el = el.children[idx];
+        }
+        return el;
+    }
+
+    function getTextSnippet(el) {
+        if (el.tagName === 'IMG') return '[Image]';
+        if (el.tagName === 'HR') return '[Divider]';
+        // Get direct text content only (not children)
+        let text = '';
+        for (const child of el.childNodes) {
+            if (child.nodeType === 3) text += child.textContent;
+        }
+        text = text.trim();
+        if (!text) {
+            // fallback to full text content
+            text = (el.textContent || '').trim();
+        }
+        return text.substring(0, 50) || ('[' + el.tagName.toLowerCase() + ']');
+    }
+
+    function getTagLabel(tag) {
+        if (/^H[1-6]$/.test(tag)) return '🔤';
+        if (tag === 'P' || tag === 'SPAN' || tag === 'A') return '📝';
+        if (tag === 'IMG') return '🖼';
+        if (tag === 'HR') return '━';
+        if (tag === 'TABLE' || tag === 'TR' || tag === 'TD' || tag === 'TH') return '📊';
+        if (tag === 'UL' || tag === 'OL' || tag === 'LI') return '📋';
+        return '📦';
+    }
+
+    function buildTree(el, depth) {
+        if (!el || depth > 6) return [];
+        const nodes = [];
+        const children = Array.from(el.children);
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            if (child.tagName === 'SCRIPT' || child.tagName === 'STYLE' || child.tagName === 'LINK' || child.tagName === 'META') continue;
+            if (SKIP_IDS.has(child.id)) continue;
+
+            const tag = child.tagName;
+            const isMeaningful = MEANINGFUL_TAGS.has(tag);
+            const childTree = buildTree(child, depth + 1);
+            
+            if (isMeaningful || childTree.length > 0) {
+                const path = getElementPath(child);
+                nodes.push({
+                    tag: tag.toLowerCase(),
+                    label: getTagLabel(tag),
+                    text: getTextSnippet(child),
+                    path: path,
+                    childCount: child.children.length,
+                    children: childTree,
+                    depth: depth
+                });
+            }
+        }
+        return nodes;
+    }
+
+    function sendTree() {
+        const tree = buildTree(document.body, 0);
+        window.parent.postMessage({ type: 'TREE_DATA', tree: tree }, '*');
+    }
+
+    function syncHtmlBack() {
+        // Send updated HTML to parent so React state stays in sync
+        const html = document.documentElement.outerHTML;
+        window.parent.postMessage({ type: 'HTML_SYNC', html: html }, '*');
+    }
+
+    // Listen for commands from parent
+    window.addEventListener('message', (e) => {
+        const data = e.data;
+        if (!data || !data.type) return;
+
+        switch (data.type) {
+            case 'GET_TREE': {
+                sendTree();
+                break;
+            }
+            case 'SELECT_ELEMENT': {
+                const el = getElementByPath(data.path);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.remove('tree-highlight');
+                    void el.offsetWidth; // force reflow
+                    el.classList.add('tree-highlight');
+                    setTimeout(() => el.classList.remove('tree-highlight'), 2000);
+                }
+                break;
+            }
+            case 'DELETE_ELEMENT': {
+                const el = getElementByPath(data.path);
+                if (el && el.parentElement) {
+                    el.remove();
+                    sendTree();
+                    syncHtmlBack();
+                }
+                break;
+            }
+            case 'MOVE_ELEMENT': {
+                const el = getElementByPath(data.path);
+                if (!el || !el.parentElement) break;
+                const parent = el.parentElement;
+                if (data.direction === 'up') {
+                    const prev = el.previousElementSibling;
+                    if (prev) parent.insertBefore(el, prev);
+                } else if (data.direction === 'down') {
+                    const next = el.nextElementSibling;
+                    if (next) parent.insertBefore(next, el);
+                }
+                sendTree();
+                syncHtmlBack();
+                break;
+            }
+            case 'INSERT_ELEMENT': {
+                const html = data.html;
+                if (!html) break;
+                const temp = document.createElement('div');
+                temp.innerHTML = html;
+                const newEl = temp.firstElementChild;
+                if (!newEl) break;
+                
+                if (data.position === 'top') {
+                    document.body.insertBefore(newEl, document.body.firstChild);
+                } else if (data.path && data.path.length > 0) {
+                    const ref = getElementByPath(data.path);
+                    if (ref && ref.parentElement) {
+                        if (data.position === 'before') {
+                            ref.parentElement.insertBefore(newEl, ref);
+                        } else {
+                            ref.parentElement.insertBefore(newEl, ref.nextSibling);
+                        }
+                    } else {
+                        document.body.appendChild(newEl);
+                    }
+                } else {
+                    document.body.appendChild(newEl);
+                }
+                sendTree();
+                syncHtmlBack();
+                break;
+            }
+        }
+    });
+
+    // Report element clicks to parent (for tree panel sync)
+    document.addEventListener('click', (e) => {
+        // Don't report clicks on toolbar elements
+        if (e.target.closest('#floating-toolbar')) return;
+        const tag = e.target.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE') return;
+        const path = getElementPath(e.target);
+        if (path.length > 0) {
+            window.parent.postMessage({ type: 'ELEMENT_CLICKED', path: path }, '*');
+        }
+    });
 
 })();
 </script>
