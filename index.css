@@ -340,6 +340,8 @@ body {
     box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.8);
     border-color: rgba(255, 255, 255, 0.1);
     cursor: default;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* CRITICAL FIX for mobile fixed-positioning drift: Remove perspective/transform from parents when in focus mode */
@@ -365,6 +367,8 @@ body {
 .stage-container.mode-focus .artifact-card.focused .artifact-iframe {
     pointer-events: auto;
     /* Enable interaction */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* === Generating State === */
