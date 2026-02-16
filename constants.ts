@@ -380,14 +380,214 @@ export const INJECTED_EDITOR_SCRIPT = `
 
     // Report element clicks to parent (for tree panel sync)
     document.addEventListener('click', (e) => {
-        // Don't report clicks on toolbar elements
         if (e.target.closest('#floating-toolbar')) return;
+        if (e.target.closest('.drag-handle')) return;
         const tag = e.target.tagName;
         if (tag === 'SCRIPT' || tag === 'STYLE') return;
         const path = getElementPath(e.target);
         if (path.length > 0) {
             window.parent.postMessage({ type: 'ELEMENT_CLICKED', path: path }, '*');
         }
+    });
+
+    // ============================================================
+    // 4. Drag & Drop System
+    // ============================================================
+    const dragCSS = document.createElement('style');
+    dragCSS.innerHTML = \`
+        .drag-handle {
+            position: absolute;
+            width: 22px; height: 22px;
+            background: #3b82f6;
+            border-radius: 4px;
+            cursor: grab;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9998;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            transition: transform 0.15s, opacity 0.15s;
+            opacity: 0.85;
+        }
+        .drag-handle:hover { opacity: 1; transform: scale(1.1); }
+        .drag-handle:active { cursor: grabbing; }
+        .drag-handle svg { width: 14px; height: 14px; fill: white; pointer-events: none; }
+        .drag-indicator {
+            position: absolute;
+            left: 0; right: 0;
+            height: 3px;
+            background: #3b82f6;
+            border-radius: 2px;
+            z-index: 9997;
+            pointer-events: none;
+            box-shadow: 0 0 8px rgba(59,130,246,0.6);
+        }
+        .drag-indicator::before, .drag-indicator::after {
+            content: '';
+            position: absolute;
+            top: -3px;
+            width: 9px; height: 9px;
+            background: #3b82f6;
+            border-radius: 50%;
+        }
+        .drag-indicator::before { left: -4px; }
+        .drag-indicator::after { right: -4px; }
+        .dragging-element {
+            opacity: 0.4 !important;
+            outline: 2px dashed #3b82f6 !important;
+            outline-offset: 2px !important;
+        }
+        .drag-selected {
+            outline: 2px solid rgba(59,130,246,0.5) !important;
+            outline-offset: 2px !important;
+        }
+    \`;
+    document.head.appendChild(dragCSS);
+
+    let dragHandle = null;
+    let selectedEl = null;
+    let isDragging = false;
+    let draggedEl = null;
+    let dragIndicator = null;
+    let dropTarget = null;
+    let dropPos = 'after';
+
+    const GRIP_SVG = '<svg viewBox="0 0 24 24"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>';
+
+    function showHandle(el) {
+        removeHandle();
+        if (el === document.body || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return;
+        selectedEl = el;
+        el.classList.add('drag-selected');
+        dragHandle = document.createElement('div');
+        dragHandle.className = 'drag-handle';
+        dragHandle.innerHTML = GRIP_SVG;
+        dragHandle.title = 'Drag to move';
+        document.body.appendChild(dragHandle);
+        placeHandle(el);
+        dragHandle.addEventListener('mousedown', startDrag);
+        dragHandle.addEventListener('touchstart', startDrag, { passive: false });
+    }
+
+    function placeHandle(el) {
+        if (!dragHandle) return;
+        const r = el.getBoundingClientRect();
+        const sT = window.pageYOffset || document.documentElement.scrollTop;
+        const sL = window.pageXOffset || document.documentElement.scrollLeft;
+        dragHandle.style.top = (r.top + sT) + 'px';
+        dragHandle.style.left = (r.left + sL - 28) + 'px';
+        if (r.left < 30) dragHandle.style.left = (r.right + sL + 4) + 'px';
+    }
+
+    function removeHandle() {
+        if (dragHandle) { dragHandle.remove(); dragHandle = null; }
+        if (selectedEl) { selectedEl.classList.remove('drag-selected'); selectedEl = null; }
+    }
+
+    function findDraggable(el) {
+        let n = el;
+        while (n && n !== document.body) {
+            if (n.parentElement === document.body) return n;
+            const t = n.tagName;
+            if (['DIV','SECTION','TABLE','FIGURE','HEADER','FOOTER','NAV','ARTICLE','UL','OL','BLOCKQUOTE','HR'].includes(t)) {
+                if (n.parentElement && ['DIV','SECTION','BODY','MAIN','ARTICLE'].includes(n.parentElement.tagName)) return n;
+            }
+            if (['H1','H2','H3','H4','H5','H6','P','IMG'].includes(t)) return n;
+            n = n.parentElement;
+        }
+        return el;
+    }
+
+    function startDrag(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        draggedEl = selectedEl;
+        if (!draggedEl) return;
+        isDragging = true;
+        draggedEl.classList.add('dragging-element');
+        dragIndicator = document.createElement('div');
+        dragIndicator.className = 'drag-indicator';
+        document.body.appendChild(dragIndicator);
+        dragIndicator.style.display = 'none';
+        if (e.type === 'touchstart') {
+            document.addEventListener('touchmove', moveDrag, { passive: false });
+            document.addEventListener('touchend', endDrag);
+        } else {
+            document.addEventListener('mousemove', moveDrag);
+            document.addEventListener('mouseup', endDrag);
+        }
+    }
+
+    function moveDrag(e) {
+        if (!isDragging || !draggedEl) return;
+        e.preventDefault();
+        const cY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+        const parent = draggedEl.parentElement;
+        if (!parent) return;
+        const siblings = Array.from(parent.children).filter(
+            c => c !== draggedEl && c.tagName !== 'SCRIPT' && c.tagName !== 'STYLE' && !c.classList.contains('drag-handle') && !c.classList.contains('drag-indicator')
+        );
+        let closest = null;
+        let bestDist = Infinity;
+        let before = true;
+        for (const s of siblings) {
+            const r = s.getBoundingClientRect();
+            const mid = r.top + r.height / 2;
+            const d = Math.abs(cY - mid);
+            if (d < bestDist) { bestDist = d; closest = s; before = cY < mid; }
+        }
+        if (closest) {
+            dropTarget = closest;
+            dropPos = before ? 'before' : 'after';
+            const r = closest.getBoundingClientRect();
+            const sT = window.pageYOffset || document.documentElement.scrollTop;
+            const sL = window.pageXOffset || document.documentElement.scrollLeft;
+            const y = before ? r.top : r.bottom;
+            dragIndicator.style.display = 'block';
+            dragIndicator.style.top = (y + sT - 1) + 'px';
+            dragIndicator.style.left = (r.left + sL) + 'px';
+            dragIndicator.style.width = r.width + 'px';
+        }
+        if (cY < 50) window.scrollBy(0, -8);
+        else if (cY > window.innerHeight - 50) window.scrollBy(0, 8);
+    }
+
+    function endDrag() {
+        if (!isDragging) return;
+        isDragging = false;
+        document.removeEventListener('mousemove', moveDrag);
+        document.removeEventListener('mouseup', endDrag);
+        document.removeEventListener('touchmove', moveDrag);
+        document.removeEventListener('touchend', endDrag);
+        if (draggedEl) draggedEl.classList.remove('dragging-element');
+        if (dropTarget && draggedEl && dropTarget !== draggedEl) {
+            const p = dropTarget.parentElement;
+            if (p) {
+                if (dropPos === 'before') p.insertBefore(draggedEl, dropTarget);
+                else p.insertBefore(draggedEl, dropTarget.nextSibling);
+                draggedEl.style.transition = 'outline-color 0.6s';
+                draggedEl.style.outline = '2px solid #22c55e';
+                draggedEl.style.outlineOffset = '2px';
+                setTimeout(() => { draggedEl.style.outline = ''; draggedEl.style.outlineOffset = ''; draggedEl.style.transition = ''; }, 800);
+                syncHtmlBack();
+                sendTree();
+            }
+        }
+        if (dragIndicator) { dragIndicator.remove(); dragIndicator = null; }
+        dropTarget = null;
+        draggedEl = null;
+        removeHandle();
+    }
+
+    // Show drag handle when clicking elements
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('#floating-toolbar') || e.target.closest('.drag-handle')) return;
+        if (e.target.tagName === 'SCRIPT' || e.target.tagName === 'STYLE') return;
+        const d = findDraggable(e.target);
+        if (d && d !== document.body) showHandle(d);
+    });
+
+    // Keep handle positioned on scroll
+    window.addEventListener('scroll', () => {
+        if (selectedEl && dragHandle && !isDragging) placeHandle(selectedEl);
     });
 
 })();
