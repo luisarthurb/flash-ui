@@ -30,7 +30,9 @@ import {
     PrinterIcon,
     UploadIcon,
     ImageIcon,
-    TreeIcon
+    TreeIcon,
+    TextIcon,
+    DividerIcon
 } from './components/Icons';
 
 function App() {
@@ -287,6 +289,22 @@ STRICT CONSTRAINT: Keep the main product/subject EXACTLY as it is in the origina
                 case 'ELEMENT_CLICKED': {
                     if (isTreeOpen && event.data.path) {
                         setSelectedElementPath(event.data.path);
+                    }
+                    break;
+                }
+                case 'CONTENT_HEIGHT': {
+                    // Auto-resize the focused iframe to match content
+                    if (focusedArtifactIndex !== null && event.data.height) {
+                        const currentSession = sessions[currentSessionIndex];
+                        if (currentSession) {
+                            const artifact = currentSession.artifacts[focusedArtifactIndex];
+                            const iframes = document.querySelectorAll('iframe');
+                            iframes.forEach((iframe) => {
+                                if (iframe.title === artifact.id) {
+                                    iframe.style.height = event.data.height + 'px';
+                                }
+                            });
+                        }
                     }
                     break;
                 }
@@ -875,6 +893,19 @@ Return ONLY RAW HTML. No markdown.
                         </button>
                         <button onClick={handleShowCode}>
                             <CodeIcon /> Source
+                        </button>
+                        <button onClick={() => sendToFocusedIframe({ type: 'INSERT_ELEMENT', html: '<p contenteditable="true" style="padding: 8px 16px; margin: 8px 0; font-size: 16px; line-height: 1.6;">New text block — click to edit</p>' })}>
+                            <TextIcon /> Text
+                        </button>
+                        <button onClick={() => {
+                            const url = prompt('Image URL (or leave empty for placeholder):');
+                            const src = url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop';
+                            sendToFocusedIframe({ type: 'INSERT_ELEMENT', html: '<img src="' + src + '" style="max-width: 100%; height: auto; display: block; margin: 12px auto; border-radius: 8px;" />' });
+                        }}>
+                            <ImageIcon /> Image
+                        </button>
+                        <button onClick={() => sendToFocusedIframe({ type: 'INSERT_ELEMENT', html: '<hr style="border: none; border-top: 2px solid currentColor; margin: 16px 0; opacity: 0.3;" />' })}>
+                            <DividerIcon /> Divider
                         </button>
                         <button onClick={handleOpenTree} className="elements-btn">
                             <TreeIcon /> Elements

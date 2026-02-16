@@ -318,57 +318,70 @@ body {
     /* Interact only in Focus mode */
 }
 
-/* === Focus Mode Styles === */
+/* === Focus Mode — Canvas Workspace === */
+.stage-container.mode-focus {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: #e5e5e5;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px 120px;
+    perspective: none !important;
+}
+
 .stage-container.mode-focus .artifact-card {
     opacity: 0;
     pointer-events: none;
     transform: scale(0.8);
-}
-
-.stage-container.mode-focus .artifact-card.focused {
-    position: fixed;
-    /* Break out of grid */
-    top: 50%;
-    left: 50%;
-    width: 90vw;
-    max-width: 1200px;
-    height: 85vh;
-    transform: translate(-50%, -50%);
-    z-index: 100;
-    opacity: 1;
-    pointer-events: auto;
-    box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.8);
-    border-color: rgba(255, 255, 255, 0.1);
-    cursor: default;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-}
-
-/* CRITICAL FIX for mobile fixed-positioning drift: Remove perspective/transform from parents when in focus mode */
-.stage-container.mode-focus {
-    perspective: none !important;
+    position: absolute;
 }
 
 .stage-container.mode-focus .session-group.active-session {
+    display: flex;
+    justify-content: center;
+    width: 100%;
     transform: none !important;
     transform-style: flat !important;
 }
 
 .stage-container.mode-focus .artifact-grid {
+    display: flex;
+    justify-content: center;
+    width: 100%;
     transform: none !important;
     perspective: none !important;
 }
 
+.stage-container.mode-focus .artifact-card.focused {
+    position: relative;
+    width: 90vw;
+    max-width: 900px;
+    height: auto;
+    min-height: 400px;
+    opacity: 1;
+    pointer-events: auto;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
+    border-color: rgba(0, 0, 0, 0.08);
+    border-radius: 4px;
+    cursor: default;
+    overflow: visible;
+    background: white;
+    transform: none;
+}
+
 .stage-container.mode-focus .artifact-card.focused .artifact-header {
     display: none;
-    /* Hide header in full screen mode for immersion */
 }
 
 .stage-container.mode-focus .artifact-card.focused .artifact-iframe {
     pointer-events: auto;
-    /* Enable interaction */
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    border: none;
+    width: 100%;
+    min-height: 600px;
 }
 
 /* === Generating State === */
@@ -1040,11 +1053,12 @@ body {
         -webkit-overflow-scrolling: touch;
     }
 
-    /* Disable scrolling of the grid completely when an item is focused to fix overscroll drift */
+    /* Canvas workspace on mobile: let it scroll naturally */
     .stage-container.mode-focus .artifact-grid {
-        overflow-y: hidden !important;
-        pointer-events: none;
-        height: 100vh;
+        overflow-y: visible;
+        pointer-events: auto;
+        height: auto;
+        padding: 20px 10px 140px;
     }
 
     .artifact-card {
@@ -1056,14 +1070,10 @@ body {
         font-size: 3.5rem;
     }
 
-    /* Adjust focused state for mobile to avoid cutoffs and center more cleanly */
+    /* Adjust focused card for mobile */
     .stage-container.mode-focus .artifact-card.focused {
-        width: 92vw;
-        height: 65vh;
-        top: 40%;
-        left: 50%;
-        transform: translate(-50%, -40%) !important;
-        /* Force centering despite any parent shifts */
+        width: 96vw;
+        max-width: none;
     }
 
     .action-bar {
