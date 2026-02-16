@@ -52,11 +52,11 @@ export const INJECTED_EDITOR_SCRIPT = `
 <script>
 (function() {
     // ============================================================
-    // 0. Force Scroll + Report Height
+    // 0. Force Scroll + Report Height + Canvas Setup
     // ============================================================
     var forceScrollCSS = document.createElement('style');
     forceScrollCSS.innerHTML = [
-        'html, body { overflow-y: auto !important; overflow-x: hidden !important; min-height: 100% !important; }',
+        'html, body { overflow-y: auto !important; overflow-x: hidden !important; min-height: 100% !important; position: relative; }',
         '@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }',
         '@keyframes elementHighlight {',
         '  0% { outline: 2px dashed #3b82f6; outline-offset: 2px; }',
@@ -76,7 +76,6 @@ export const INJECTED_EDITOR_SCRIPT = `
         );
         window.parent.postMessage({ type: 'CONTENT_HEIGHT', height: h }, '*');
     }
-    // Report height on load and after any change
     reportHeight();
     window.addEventListener('load', reportHeight);
     var heightObserver = new MutationObserver(function() { setTimeout(reportHeight, 50); });
@@ -93,20 +92,31 @@ export const INJECTED_EDITOR_SCRIPT = `
         + '<button data-cmd="underline" title="Underline"><u>U</u></button>'
         + '<div class="separator"></div>'
         + '<button data-cmd="fontSize" data-val="3" title="Normal">A</button>'
-        + '<button data-cmd="fontSize" data-val="5" title="Large">A+</button>';
+        + '<button data-cmd="fontSize" data-val="5" title="Large">A+</button>'
+        + '<div class="separator"></div>'
+        + '<button id="btn-align-left" title="Left">L</button>'
+        + '<button id="btn-align-center" title="Center">C</button>'
+        + '<button id="btn-align-right" title="Right">R</button>';
     toolbar.style.cssText = 'position:fixed;display:none;background:#222;border-radius:8px;padding:4px;gap:4px;align-items:center;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);';
     var btnCSS = 'background:transparent;border:none;color:white;width:28px;height:28px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:serif;font-size:14px;';
+
     toolbar.querySelectorAll('button').forEach(function(b) {
+        if (b.id.startsWith('btn-align')) return;
         b.style.cssText = btnCSS;
-        b.onmouseover = function() { b.style.background = 'rgba(255,255,255,0.1)'; };
-        b.onmouseout = function() { b.style.background = 'transparent'; };
-        b.onclick = function(e) {
-            e.preventDefault();
-            document.execCommand(b.getAttribute('data-cmd'), false, b.getAttribute('data-val'));
-        };
+        b.onclick = function(e) { e.preventDefault(); document.execCommand(b.getAttribute('data-cmd'), false, b.getAttribute('data-val')); };
     });
-    var sep = toolbar.querySelector('.separator');
-    if (sep) sep.style.cssText = 'width:1px;height:16px;background:rgba(255,255,255,0.2);margin:0 4px;';
+    ['left','center','right'].forEach(function(align) {
+        var btn = toolbar.querySelector('#btn-align-' + align);
+        if (btn) {
+            btn.style.cssText = btnCSS;
+            btn.onclick = function(e) {
+                e.preventDefault();
+                document.execCommand('justify' + (align === 'center' ? 'Center' : (align === 'right' ? 'Right' : 'Left')));
+            };
+        }
+    });
+    var seps = toolbar.querySelectorAll('.separator');
+    seps.forEach(function(s) { s.style.cssText = 'width:1px;height:16px;background:rgba(255,255,255,0.2);margin:0 4px;'; });
     document.body.appendChild(toolbar);
 
     function updateToolbarPos() {
@@ -115,7 +125,7 @@ export const INJECTED_EDITOR_SCRIPT = `
             var rect = sel.getRangeAt(0).getBoundingClientRect();
             toolbar.style.display = 'flex';
             toolbar.style.top = (rect.top - 40) + 'px';
-            toolbar.style.left = (rect.left + rect.width/2 - toolbar.offsetWidth/2) + 'px';
+            toolbar.style.left = (rect.left + rect.width / 2 - toolbar.offsetWidth / 2) + 'px';
         } else {
             toolbar.style.display = 'none';
         }
@@ -126,69 +136,45 @@ export const INJECTED_EDITOR_SCRIPT = `
     // 2. Image Editing Logic
     // ============================================================
     var imgToolbar = null;
-
     document.addEventListener('click', function(e) {
         if (imgToolbar && !imgToolbar.contains(e.target) && e.target.tagName !== 'IMG') {
-            imgToolbar.remove();
-            imgToolbar = null;
+            imgToolbar.remove(); imgToolbar = null;
         }
-
         if (e.target.tagName === 'IMG') {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             if (imgToolbar) imgToolbar.remove();
-
             var img = e.target;
             var rect = img.getBoundingClientRect();
-
             imgToolbar = document.createElement('div');
-            imgToolbar.innerHTML = '<button id="btn-ai-edit" style="padding:6px 12px;background:linear-gradient(135deg,#4285f4,#9b59b6);color:white;border:none;border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:bold;border:1px solid rgba(255,255,255,0.2);">✨ AI Edit</button>'
+            imgToolbar.innerHTML = '<button id="btn-ai-edit" style="padding:6px 12px;background:linear-gradient(135deg,#4285f4,#9b59b6);color:white;border:none;border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:bold;">\\u2728 AI Edit</button>'
                 + '<div style="width:1px;height:16px;background:rgba(255,255,255,0.2);margin:0 4px;"></div>'
-                + '<button id="btn-link" style="padding:6px 12px;background:transparent;color:#ccc;border:none;border-radius:4px;cursor:pointer;font-size:12px;">🔗 Link</button>'
-                + '<button id="btn-upload" style="padding:6px 12px;background:transparent;color:#ccc;border:none;border-radius:4px;cursor:pointer;font-size:12px;">📂 Upload</button>';
-
+                + '<button id="btn-link" style="padding:6px 12px;background:transparent;color:#ccc;border:none;border-radius:4px;cursor:pointer;font-size:12px;">\\ud83d\\udd17 Link</button>'
+                + '<button id="btn-upload" style="padding:6px 12px;background:transparent;color:#ccc;border:none;border-radius:4px;cursor:pointer;font-size:12px;">\\ud83d\\udcc2 Upload</button>';
             imgToolbar.style.cssText = 'position:fixed;top:' + (rect.top + 10) + 'px;left:' + (rect.right - 220) + 'px;display:flex;gap:4px;align-items:center;background:rgba(0,0,0,0.9);padding:6px;border-radius:8px;backdrop-filter:blur(8px);z-index:10000;box-shadow:0 4px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);animation:fadeIn 0.2s ease;';
             if (rect.right - 220 < 0) imgToolbar.style.left = (rect.left + 10) + 'px';
             document.body.appendChild(imgToolbar);
 
-            var aiBtn = imgToolbar.querySelector('#btn-ai-edit');
-            aiBtn.onclick = function() {
+            imgToolbar.querySelector('#btn-ai-edit').onclick = function() {
                 var p = prompt("How should AI edit this product?");
                 if (p) {
-                    img.style.opacity = '0.5';
-                    img.style.filter = 'grayscale(100%) blur(2px)';
-                    img.style.transition = 'all 0.5s';
+                    img.style.opacity = '0.5'; img.style.filter = 'grayscale(100%) blur(2px)'; img.style.transition = 'all 0.5s';
                     window.parent.postMessage({ type: 'AI_IMAGE_EDIT', prompt: p, src: img.src }, '*');
                     imgToolbar.remove(); imgToolbar = null;
                 }
             };
-
-            var linkBtn = imgToolbar.querySelector('#btn-link');
-            linkBtn.onclick = function() {
+            imgToolbar.querySelector('#btn-link').onclick = function() {
                 var u = prompt('Image URL:', img.src);
                 if (u) img.src = u;
                 imgToolbar.remove(); imgToolbar = null;
             };
-            linkBtn.onmouseover = function() { linkBtn.style.color = 'white'; };
-            linkBtn.onmouseout = function() { linkBtn.style.color = '#ccc'; };
-
-            var uploadBtn = imgToolbar.querySelector('#btn-upload');
-            uploadBtn.onclick = function() {
-                var f = document.createElement('input');
-                f.type = 'file'; f.accept = 'image/*';
+            imgToolbar.querySelector('#btn-upload').onclick = function() {
+                var f = document.createElement('input'); f.type = 'file'; f.accept = 'image/*';
                 f.onchange = function(ev) {
                     var file = ev.target.files[0];
-                    if (file) {
-                        var r = new FileReader();
-                        r.onload = function(re) { img.src = re.target.result; };
-                        r.readAsDataURL(file);
-                    }
+                    if (file) { var r = new FileReader(); r.onload = function(re) { img.src = re.target.result; }; r.readAsDataURL(file); }
                 };
-                f.click();
-                imgToolbar.remove(); imgToolbar = null;
+                f.click(); imgToolbar.remove(); imgToolbar = null;
             };
-            uploadBtn.onmouseover = function() { uploadBtn.style.color = 'white'; };
-            uploadBtn.onmouseout = function() { uploadBtn.style.color = '#ccc'; };
         }
     });
 
@@ -202,10 +188,8 @@ export const INJECTED_EDITOR_SCRIPT = `
         var path = [];
         var node = el;
         while (node && node !== document.body && node.parentElement) {
-            var parent = node.parentElement;
-            var siblings = Array.from(parent.children);
-            path.unshift(siblings.indexOf(node));
-            node = parent;
+            path.unshift(Array.from(node.parentElement.children).indexOf(node));
+            node = node.parentElement;
         }
         return path;
     }
@@ -232,13 +216,13 @@ export const INJECTED_EDITOR_SCRIPT = `
     }
 
     function getTagLabel(tag) {
-        if (/^H[1-6]$/.test(tag)) return '🔤';
-        if (tag === 'P' || tag === 'SPAN' || tag === 'A') return '📝';
-        if (tag === 'IMG') return '🖼';
-        if (tag === 'HR') return '━';
-        if (tag === 'TABLE' || tag === 'TR' || tag === 'TD' || tag === 'TH') return '📊';
-        if (tag === 'UL' || tag === 'OL' || tag === 'LI') return '📋';
-        return '📦';
+        if (/^H[1-6]$/.test(tag)) return '\\ud83d\\udd24';
+        if (tag === 'P' || tag === 'SPAN' || tag === 'A') return '\\ud83d\\udcdd';
+        if (tag === 'IMG') return '\\ud83d\\uddbc';
+        if (tag === 'HR') return '\\u2501';
+        if (tag === 'TABLE' || tag === 'TR' || tag === 'TD' || tag === 'TH') return '\\ud83d\\udcca';
+        if (tag === 'UL' || tag === 'OL' || tag === 'LI') return '\\ud83d\\udccb';
+        return '\\ud83d\\udce6';
     }
 
     function buildTree(el, depth) {
@@ -247,7 +231,7 @@ export const INJECTED_EDITOR_SCRIPT = `
         var children = Array.from(el.children);
         for (var i = 0; i < children.length; i++) {
             var child = children[i];
-            if (child.tagName === 'SCRIPT' || child.tagName === 'STYLE' || child.tagName === 'LINK' || child.tagName === 'META') continue;
+            if (['SCRIPT','STYLE','LINK','META'].indexOf(child.tagName) !== -1) continue;
             if (SKIP_IDS.indexOf(child.id) !== -1) continue;
             var tag = child.tagName;
             var isMeaningful = MEANINGFUL_TAGS.indexOf(tag) !== -1;
@@ -322,6 +306,12 @@ export const INJECTED_EDITOR_SCRIPT = `
             temp.innerHTML = html;
             var newEl = temp.firstElementChild;
             if (!newEl) return;
+            // Images default to absolute/free placement
+            if (newEl.tagName === 'IMG') {
+                newEl.style.position = 'absolute';
+                newEl.style.left = '50px';
+                newEl.style.top = (window.scrollY + 100) + 'px';
+            }
             if (data.position === 'top') {
                 document.body.insertBefore(newEl, document.body.firstChild);
             } else if (data.path && data.path.length > 0) {
@@ -329,13 +319,10 @@ export const INJECTED_EDITOR_SCRIPT = `
                 if (ref && ref.parentElement) {
                     if (data.position === 'before') ref.parentElement.insertBefore(newEl, ref);
                     else ref.parentElement.insertBefore(newEl, ref.nextSibling);
-                } else {
-                    document.body.appendChild(newEl);
-                }
+                } else { document.body.appendChild(newEl); }
             } else {
                 document.body.appendChild(newEl);
             }
-            // Make new element editable
             if (newEl.tagName !== 'IMG' && newEl.tagName !== 'HR') {
                 newEl.setAttribute('contenteditable', 'true');
             }
@@ -347,7 +334,7 @@ export const INJECTED_EDITOR_SCRIPT = `
         }
     });
 
-    // Report element clicks to parent
+    // Report element clicks to parent (for tree panel sync)
     document.addEventListener('click', function(e) {
         if (e.target.closest('#floating-toolbar')) return;
         if (e.target.closest('.drag-handle')) return;
@@ -360,110 +347,142 @@ export const INJECTED_EDITOR_SCRIPT = `
     });
 
     // ============================================================
-    // 4. Canva-Style Drag & Drop
+    // 4. HYBRID DRAG & DROP (Sort + Free Placement)
     // ============================================================
     var dragStyle = document.createElement('style');
     dragStyle.innerHTML = [
-        '.drag-handle { position:absolute; width:24px; height:24px; background:#3b82f6; border-radius:6px; cursor:grab; display:flex; align-items:center; justify-content:center; z-index:9998; box-shadow:0 2px 10px rgba(59,130,246,0.5); transition:transform 0.15s,opacity 0.15s; opacity:0.9; }',
-        '.drag-handle:hover { opacity:1; transform:scale(1.15); background:#2563eb; }',
-        '.drag-handle:active { cursor:grabbing; }',
-        '.drag-handle svg { width:14px; height:14px; fill:white; pointer-events:none; }',
-        '.drag-ghost { position:fixed; pointer-events:none; z-index:10000; opacity:0.65; border:2px solid #3b82f6; border-radius:8px; background:rgba(255,255,255,0.95); box-shadow:0 12px 40px rgba(0,0,0,0.25); max-height:100px; overflow:hidden; transform:rotate(1deg); }',
-        '.drag-indicator { position:absolute; height:3px; background:linear-gradient(90deg,#3b82f6,#60a5fa,#3b82f6); border-radius:2px; z-index:9997; pointer-events:none; box-shadow:0 0 12px rgba(59,130,246,0.4); }',
+        '.drag-handle { position:absolute; height:24px; background:#3b82f6; border-radius:6px; cursor:grab; display:flex; align-items:center; padding:0 4px; z-index:9998; box-shadow:0 2px 10px rgba(0,0,0,0.2); transform:translateY(-100%); margin-top:-4px; }',
+        '.drag-handle:hover { background:#2563eb; }',
+        '.drag-handle button { background:none; border:none; color:white; font-size:12px; cursor:pointer; padding:0 4px; display:flex; align-items:center; }',
+        '.drag-handle .divider { width:1px; height:12px; background:rgba(255,255,255,0.3); margin:0 4px; }',
+        '.drag-ghost { position:fixed; opacity:0.5; z-index:10000; pointer-events:none; border:2px dashed #3b82f6; background:white; max-height:100px; overflow:hidden; border-radius:6px; }',
+        '.drag-indicator { position:absolute; height:3px; background:linear-gradient(90deg,#3b82f6,#60a5fa,#3b82f6); pointer-events:none; z-index:9997; display:none; border-radius:2px; box-shadow:0 0 8px rgba(59,130,246,0.4); }',
         '.drag-indicator::before,.drag-indicator::after { content:""; position:absolute; top:-4px; width:11px; height:11px; background:#3b82f6; border-radius:50%; border:2px solid white; }',
         '.drag-indicator::before { left:-5px; }',
-        '.drag-indicator::after { right:-5px; }',
-        '.dragging-source { opacity:0.3 !important; outline:2px dashed rgba(59,130,246,0.4) !important; outline-offset:2px !important; }',
-        '.drag-selected { outline:2px solid rgba(59,130,246,0.5) !important; outline-offset:3px !important; position:relative; }',
-        '.drop-flash { animation:dropFlash 0.6s ease forwards; }',
-        '@keyframes dropFlash { 0%{outline:3px solid #22c55e;outline-offset:2px;} 100%{outline:3px solid transparent;outline-offset:8px;} }'
+        '.drag-indicator::after { right:-5px; }'
     ].join('\\n');
     document.head.appendChild(dragStyle);
 
-    var dragHandle = null;
-    var selectedEl = null;
-    var isDragging = false;
-    var draggedEl = null;
-    var dragGhost = null;
-    var dragIndicator = null;
-    var dropTarget = null;
-    var dropPos = 'after';
+    var dragHandle = null, selectedEl = null;
+    var isDragging = false, dragMode = 'sort';
+    var startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
+    var ghost = null, indicator = null, dropTarget = null, dropPos = 'after';
 
-    var GRIP_SVG = '<svg viewBox="0 0 24 24"><circle cx="8" cy="5" r="2"/><circle cx="16" cy="5" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/><circle cx="16" cy="19" r="2"/></svg>';
-
-    function findDraggable(el) {
-        var n = el;
-        while (n && n !== document.body) {
-            if (n.parentElement === document.body) return n;
-            var t = n.tagName;
-            var blocks = ['DIV','SECTION','TABLE','FIGURE','HEADER','FOOTER','NAV','ARTICLE','UL','OL','BLOCKQUOTE','HR'];
-            var containers = ['DIV','SECTION','BODY','MAIN','ARTICLE'];
-            if (blocks.indexOf(t) !== -1 && n.parentElement && containers.indexOf(n.parentElement.tagName) !== -1) return n;
-            var inlines = ['H1','H2','H3','H4','H5','H6','P','IMG'];
-            if (inlines.indexOf(t) !== -1) return n;
-            n = n.parentElement;
-        }
-        return el;
-    }
+    function isAbsolute(el) { return window.getComputedStyle(el).position === 'absolute'; }
 
     function showHandle(el) {
+        if (!el || el === document.body || ['SCRIPT','STYLE'].indexOf(el.tagName) !== -1) return;
+        if (dragHandle && selectedEl === el) return;
         removeHandle();
-        if (!el || el === document.body || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return;
+
         selectedEl = el;
-        el.classList.add('drag-selected');
+        el.style.outline = '2px solid rgba(59,130,246,0.5)';
+        el.style.outlineOffset = '3px';
+
         dragHandle = document.createElement('div');
         dragHandle.className = 'drag-handle';
-        dragHandle.innerHTML = GRIP_SVG;
-        dragHandle.title = 'Drag to reposition';
-        document.body.appendChild(dragHandle);
-        placeHandle(el);
-        dragHandle.addEventListener('mousedown', startDrag);
-        dragHandle.addEventListener('touchstart', startDrag, { passive: false });
-    }
 
-    function placeHandle(el) {
-        if (!dragHandle || !el) return;
-        var r = el.getBoundingClientRect();
-        var sT = window.scrollY || window.pageYOffset;
-        var sL = window.scrollX || window.pageXOffset;
-        dragHandle.style.top = (r.top + sT - 2) + 'px';
-        dragHandle.style.left = Math.max(4, r.left + sL - 30) + 'px';
+        var abs = isAbsolute(el);
+        var icon = abs ? '\\ud83d\\udd13' : '\\ud83d\\udd12';
+        var modeTitle = abs ? 'Free Move (click to lock)' : 'Locked Flow (click to free)';
+
+        dragHandle.innerHTML =
+            '<div class="grip" style="cursor:grab;padding:0 4px;color:white;font-size:14px;letter-spacing:1px;">\\u2807\\u2807</div>' +
+            '<div class="divider"></div>' +
+            '<button id="btn-mode" title="' + modeTitle + '">' + icon + '</button>' +
+            '<div class="divider"></div>' +
+            '<button id="btn-del" title="Delete">\\ud83d\\uddd1\\ufe0f</button>';
+
+        document.body.appendChild(dragHandle);
+        updateHandlePos();
+
+        // Mode Toggle: Free <-> Flow
+        dragHandle.querySelector('#btn-mode').onclick = function(ev) {
+            ev.stopPropagation();
+            var currentlyAbs = isAbsolute(selectedEl);
+            if (currentlyAbs) {
+                selectedEl.style.position = '';
+                selectedEl.style.left = ''; selectedEl.style.top = '';
+                selectedEl.style.transform = '';
+                selectedEl.style.width = '';
+                selectedEl.style.margin = '';
+            } else {
+                var rect = selectedEl.getBoundingClientRect();
+                selectedEl.style.position = 'absolute';
+                selectedEl.style.width = rect.width + 'px';
+                selectedEl.style.left = (rect.left + (window.scrollX || window.pageXOffset)) + 'px';
+                selectedEl.style.top = (rect.top + (window.scrollY || window.pageYOffset)) + 'px';
+                selectedEl.style.margin = '0';
+            }
+            showHandle(selectedEl);
+            syncHtmlBack();
+        };
+
+        // Delete
+        dragHandle.querySelector('#btn-del').onclick = function(ev) {
+            ev.stopPropagation();
+            if (confirm('Delete element?')) {
+                selectedEl.remove();
+                removeHandle();
+                sendTree();
+                syncHtmlBack();
+            }
+        };
+
+        // Drag start on grip
+        var grip = dragHandle.querySelector('.grip');
+        grip.addEventListener('mousedown', startDrag);
+        grip.addEventListener('touchstart', startDrag, { passive: false });
     }
 
     function removeHandle() {
         if (dragHandle) { dragHandle.remove(); dragHandle = null; }
-        if (selectedEl) { selectedEl.classList.remove('drag-selected'); selectedEl = null; }
+        if (selectedEl) { selectedEl.style.outline = ''; selectedEl.style.outlineOffset = ''; selectedEl = null; }
+    }
+
+    function updateHandlePos() {
+        if (!selectedEl || !dragHandle) return;
+        var r = selectedEl.getBoundingClientRect();
+        dragHandle.style.top = (r.top + (window.scrollY || window.pageYOffset)) + 'px';
+        dragHandle.style.left = (r.left + (window.scrollX || window.pageXOffset)) + 'px';
     }
 
     function startDrag(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        draggedEl = selectedEl;
-        if (!draggedEl) return;
+        e.preventDefault(); e.stopPropagation();
+        if (!selectedEl) return;
         isDragging = true;
-        draggedEl.classList.add('dragging-source');
 
-        // Pause contenteditable
+        dragMode = isAbsolute(selectedEl) ? 'free' : 'sort';
+
+        var cX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+        var cY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+        startX = cX;
+        startY = cY;
+
+        // Pause contenteditable during drag
         document.querySelectorAll('[contenteditable="true"]').forEach(function(el) {
             el.setAttribute('data-ce-paused', '1');
             el.setAttribute('contenteditable', 'false');
         });
 
-        // Create ghost
-        var rect = draggedEl.getBoundingClientRect();
-        dragGhost = document.createElement('div');
-        dragGhost.className = 'drag-ghost';
-        dragGhost.innerHTML = draggedEl.outerHTML;
-        dragGhost.style.width = Math.min(rect.width, 400) + 'px';
-        dragGhost.style.left = rect.left + 'px';
-        dragGhost.style.top = rect.top + 'px';
-        document.body.appendChild(dragGhost);
+        if (dragMode === 'free') {
+            initialLeft = parseFloat(selectedEl.style.left || 0);
+            initialTop = parseFloat(selectedEl.style.top || 0);
+            if (isNaN(initialLeft)) initialLeft = selectedEl.getBoundingClientRect().left + (window.scrollX || 0);
+            if (isNaN(initialTop)) initialTop = selectedEl.getBoundingClientRect().top + (window.scrollY || 0);
+        } else {
+            ghost = selectedEl.cloneNode(true);
+            ghost.className = 'drag-ghost';
+            ghost.style.width = selectedEl.offsetWidth + 'px';
+            ghost.style.position = 'fixed';
+            document.body.appendChild(ghost);
 
-        // Create indicator
-        dragIndicator = document.createElement('div');
-        dragIndicator.className = 'drag-indicator';
-        dragIndicator.style.display = 'none';
-        document.body.appendChild(dragIndicator);
+            indicator = document.createElement('div');
+            indicator.className = 'drag-indicator';
+            document.body.appendChild(indicator);
+
+            selectedEl.style.opacity = '0.3';
+        }
 
         if (dragHandle) dragHandle.style.display = 'none';
 
@@ -477,46 +496,51 @@ export const INJECTED_EDITOR_SCRIPT = `
     }
 
     function moveDrag(e) {
-        if (!isDragging || !draggedEl) return;
+        if (!isDragging) return;
         e.preventDefault();
         var cX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
         var cY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+        var dx = cX - startX;
+        var dy = cY - startY;
 
-        // Move ghost
-        if (dragGhost) {
-            dragGhost.style.left = (cX - dragGhost.offsetWidth / 2) + 'px';
-            dragGhost.style.top = (cY - 25) + 'px';
-        }
+        if (dragMode === 'free') {
+            // DIRECT MOVE — element follows cursor in real time
+            selectedEl.style.left = (initialLeft + dx) + 'px';
+            selectedEl.style.top = (initialTop + dy) + 'px';
+            updateHandlePos();
+        } else {
+            // SORT MODE — ghost follows cursor, indicator shows drop position
+            if (ghost) {
+                ghost.style.left = (cX + 5) + 'px';
+                ghost.style.top = (cY + 5) + 'px';
+            }
 
-        // Find drop target
-        var parent = draggedEl.parentElement;
-        if (!parent) return;
-        var siblings = Array.from(parent.children).filter(function(c) {
-            return c !== draggedEl && c.tagName !== 'SCRIPT' && c.tagName !== 'STYLE'
-                && !c.classList.contains('drag-handle')
-                && !c.classList.contains('drag-indicator')
-                && !c.classList.contains('drag-ghost');
-        });
-        var closest = null;
-        var bestDist = Infinity;
-        var before = true;
-        for (var i = 0; i < siblings.length; i++) {
-            var r = siblings[i].getBoundingClientRect();
-            var mid = r.top + r.height / 2;
-            var d = Math.abs(cY - mid);
-            if (d < bestDist) { bestDist = d; closest = siblings[i]; before = cY < mid; }
-        }
-        if (closest) {
-            dropTarget = closest;
-            dropPos = before ? 'before' : 'after';
-            var r = closest.getBoundingClientRect();
-            var sT = window.scrollY || window.pageYOffset;
-            var sL = window.scrollX || window.pageXOffset;
-            var y = before ? r.top : r.bottom;
-            dragIndicator.style.display = 'block';
-            dragIndicator.style.top = (y + sT - 1) + 'px';
-            dragIndicator.style.left = (r.left + sL) + 'px';
-            dragIndicator.style.width = r.width + 'px';
+            var siblings = Array.from(document.body.children).filter(function(c) {
+                return c !== selectedEl && c !== ghost && c !== indicator && c !== dragHandle
+                    && ['SCRIPT','STYLE'].indexOf(c.tagName) === -1
+                    && !isAbsolute(c)
+                    && !c.classList.contains('drag-handle');
+            });
+
+            var best = null, minD = Infinity;
+            for (var i = 0; i < siblings.length; i++) {
+                var r = siblings[i].getBoundingClientRect();
+                var mid = r.top + r.height / 2;
+                var d = Math.abs(cY - mid);
+                if (d < minD) { minD = d; best = siblings[i]; }
+            }
+
+            if (best) {
+                var r = best.getBoundingClientRect();
+                var isBefore = cY < (r.top + r.height / 2);
+                dropTarget = best;
+                dropPos = isBefore ? 'before' : 'after';
+
+                indicator.style.display = 'block';
+                indicator.style.top = ((window.scrollY || 0) + (isBefore ? r.top : r.bottom)) + 'px';
+                indicator.style.left = ((window.scrollX || 0) + r.left) + 'px';
+                indicator.style.width = r.width + 'px';
+            }
         }
 
         // Auto-scroll
@@ -524,8 +548,7 @@ export const INJECTED_EDITOR_SCRIPT = `
         else if (cY > window.innerHeight - 60) window.scrollBy(0, 10);
     }
 
-    function endDrag() {
-        if (!isDragging) return;
+    function endDrag(e) {
         isDragging = false;
         document.removeEventListener('mousemove', moveDrag);
         document.removeEventListener('mouseup', endDrag);
@@ -538,40 +561,42 @@ export const INJECTED_EDITOR_SCRIPT = `
             el.removeAttribute('data-ce-paused');
         });
 
-        if (draggedEl) draggedEl.classList.remove('dragging-source');
-
-        if (dropTarget && draggedEl && dropTarget !== draggedEl) {
-            var p = dropTarget.parentElement;
-            if (p) {
-                if (dropPos === 'before') p.insertBefore(draggedEl, dropTarget);
-                else p.insertBefore(draggedEl, dropTarget.nextSibling);
-                draggedEl.classList.add('drop-flash');
-                var movedEl = draggedEl;
-                setTimeout(function() { movedEl.classList.remove('drop-flash'); }, 600);
-                syncHtmlBack();
-                sendTree();
+        if (dragMode === 'free') {
+            syncHtmlBack();
+        } else {
+            if (dropTarget && selectedEl) {
+                if (dropPos === 'before') document.body.insertBefore(selectedEl, dropTarget);
+                else document.body.insertBefore(selectedEl, dropTarget.nextSibling);
             }
+            if (ghost) { ghost.remove(); ghost = null; }
+            if (indicator) { indicator.remove(); indicator = null; }
+            if (selectedEl) selectedEl.style.opacity = '1';
         }
 
-        if (dragGhost) { dragGhost.remove(); dragGhost = null; }
-        if (dragIndicator) { dragIndicator.remove(); dragIndicator = null; }
         dropTarget = null;
-        draggedEl = null;
-        removeHandle();
+        if (dragHandle) dragHandle.style.display = '';
+        updateHandlePos();
+        syncHtmlBack();
+        sendTree();
     }
 
-    // Show drag handle on click (not during drag)
+    // Show drag handle on element click
     document.addEventListener('click', function(e) {
         if (isDragging) return;
-        if (e.target.closest('#floating-toolbar') || e.target.closest('.drag-handle')) return;
-        if (e.target.tagName === 'SCRIPT' || e.target.tagName === 'STYLE') return;
-        var d = findDraggable(e.target);
-        if (d && d !== document.body) showHandle(d);
+        if (e.target.closest('.drag-handle') || e.target.closest('#floating-toolbar')) return;
+        var target = e.target;
+        while (target && target !== document.body && ['DIV','P','H1','H2','H3','H4','H5','H6','IMG','UL','OL','TABLE','SECTION','HEADER','FOOTER','FIGURE','HR','BLOCKQUOTE'].indexOf(target.tagName) === -1) {
+            target = target.parentElement;
+        }
+        if (target && target !== document.body) {
+            showHandle(target);
+        } else {
+            removeHandle();
+        }
     });
 
-    // Keep handle positioned on scroll
     window.addEventListener('scroll', function() {
-        if (selectedEl && dragHandle && !isDragging) placeHandle(selectedEl);
+        if (!isDragging) updateHandlePos();
     });
 
 })();
