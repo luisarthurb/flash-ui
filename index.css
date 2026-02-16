@@ -697,6 +697,56 @@ body {
     color: transparent;
 }
 
+/* Contextual element editing hint */
+.element-edit-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 8px;
+    font-size: 0.82rem;
+    color: #93c5fd;
+    margin-bottom: 4px;
+    animation: fadeSlideIn 0.2s ease-out;
+}
+
+.element-edit-hint span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.element-edit-dismiss {
+    background: none;
+    border: none;
+    color: #93c5fd;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 0 2px;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+
+.element-edit-dismiss:hover {
+    opacity: 1;
+}
+
+@keyframes fadeSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Styles for loading prompt text */
 .input-generating-label {
     flex: 1;

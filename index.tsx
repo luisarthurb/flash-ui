@@ -73,6 +73,15 @@ function App() {
     const [treeData, setTreeData] = useState<TreeNode[]>([]);
     const [selectedElementPath, setSelectedElementPath] = useState<number[] | null>(null);
 
+    // Contextual element editing state
+    const [selectedElementInfo, setSelectedElementInfo] = useState<{
+        path: number[];
+        html: string;
+        tagName: string;
+        snippet: string;
+    } | null>(null);
+    const [isEditingElement, setIsEditingElement] = useState(false);
+
     // Tutorial state
     const [showTutorial, setShowTutorial] = useState(false);
 
@@ -287,8 +296,17 @@ STRICT CONSTRAINT: Keep the main product/subject EXACTLY as it is in the origina
                     break;
                 }
                 case 'ELEMENT_CLICKED': {
-                    if (isTreeOpen && event.data.path) {
-                        setSelectedElementPath(event.data.path);
+                    if (event.data.path) {
+                        if (isTreeOpen) setSelectedElementPath(event.data.path);
+                        // Store element info for contextual editing
+                        if (focusedArtifactIndex !== null && event.data.html) {
+                            setSelectedElementInfo({
+                                path: event.data.path,
+                                html: event.data.html,
+                                tagName: event.data.tagName || 'ELEMENT',
+                                snippet: event.data.snippet || ''
+                            });
+                        }
                     }
                     break;
                 }
@@ -496,11 +514,69 @@ Required JSON Output Format (stream ONE object per line):
         sendToFocusedIframe({ type: 'INSERT_ELEMENT', html, position, path: path || undefined });
     }, [sendToFocusedIframe]);
 
+    // Contextual element editing via AI
+    const handleEditElement = useCallback(async (instruction: string) => {
+        if (!selectedElementInfo || !instruction.trim() || isEditingElement) return;
+        setIsEditingElement(true);
+        setInputValue('');
+
+        try {
+            const apiKey = process.env.API_KEY;
+            if (!apiKey) throw new Error('API_KEY is not configured.');
+            const ai = new GoogleGenAI({ apiKey });
+
+            const prompt = `
+You are editing a SPECIFIC element in a restaurant menu HTML document.
+
+**CURRENT ELEMENT HTML:**
+${selectedElementInfo.html}
+
+**USER INSTRUCTION:**
+"${instruction}"
+
+**STRICT RULES:**
+1. Return ONLY the edited HTML fragment — no markdown, no code fences, no explanation.
+2. Keep the same general styling (inline styles, classes) unless the user asks to change it.
+3. All text elements MUST have contenteditable="true".
+4. If the user says "add" something, ADD it to the existing content, don't replace everything.
+5. If the user says "remove" or "delete", remove only what they specify.
+6. Preserve the existing structure and formatting as much as possible.
+7. Return clean HTML that can be directly inserted into the document.
+            `.trim();
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: { role: 'user', parts: [{ text: prompt }] }
+            });
+
+            let editedHtml = (response.text || '').trim();
+            if (editedHtml.startsWith('```html')) editedHtml = editedHtml.substring(7).trimStart();
+            if (editedHtml.startsWith('```')) editedHtml = editedHtml.substring(3).trimStart();
+            if (editedHtml.endsWith('```')) editedHtml = editedHtml.substring(0, editedHtml.length - 3).trimEnd();
+
+            if (editedHtml) {
+                sendToFocusedIframe({ type: 'EDIT_ELEMENT', path: selectedElementInfo.path, html: editedHtml });
+                setSelectedElementInfo(null);
+            }
+        } catch (e: any) {
+            console.error('Error editing element:', e);
+        } finally {
+            setIsEditingElement(false);
+        }
+    }, [selectedElementInfo, isEditingElement, sendToFocusedIframe]);
+
     const handleSendMessage = useCallback(async (manualPrompt?: string) => {
         const promptToUse = manualPrompt || inputValue;
         const trimmedInput = promptToUse.trim();
 
         if (!trimmedInput || isLoading) return;
+
+        // If an element is selected in focus mode, edit that element instead
+        if (focusedArtifactIndex !== null && selectedElementInfo) {
+            handleEditElement(trimmedInput);
+            return;
+        }
+
         if (!manualPrompt) setInputValue('');
         if (!manualPrompt) setSelectedImage(null);
 
@@ -526,6 +602,7 @@ Required JSON Output Format (stream ONE object per line):
         setSessions(prev => [...prev, newSession]);
         setCurrentSessionIndex(sessions.length);
         setFocusedArtifactIndex(null);
+        setSelectedElementInfo(null);
 
         try {
             const apiKey = process.env.API_KEY;
@@ -711,7 +788,7 @@ Return ONLY RAW HTML. No markdown.
         } finally {
             setIsLoading(false);
         }
-    }, [inputValue, selectedImage, isLoading, sessions.length, colors, selectedFont]);
+    }, [inputValue, selectedImage, isLoading, sessions.length, colors, selectedFont, focusedArtifactIndex, selectedElementInfo, handleEditElement]);
 
     const handleSurpriseMe = () => {
         const currentPrompt = placeholders[placeholderIndex];
@@ -720,12 +797,14 @@ Return ONLY RAW HTML. No markdown.
     };
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (event.key === 'Enter' && !event.shiftKey && !isLoading) {
+        if (event.key === 'Enter' && !event.shiftKey && !isLoading && !isEditingElement) {
             event.preventDefault();
             handleSendMessage();
         } else if (event.key === 'Tab' && !inputValue && !isLoading) {
             event.preventDefault();
             setInputValue(placeholders[placeholderIndex]);
+        } else if (event.key === 'Escape' && selectedElementInfo) {
+            setSelectedElementInfo(null);
         }
     };
 
@@ -882,7 +961,7 @@ Return ONLY RAW HTML. No markdown.
 
                 <div className={`action-bar ${focusedArtifactIndex !== null ? 'visible' : ''}`}>
                     <div className="action-buttons">
-                        <button onClick={() => setFocusedArtifactIndex(null)}>
+                        <button onClick={() => { setFocusedArtifactIndex(null); setSelectedElementInfo(null); }}>
                             <GridIcon /> Grid
                         </button>
                         <button onClick={handleGenerateVariations} disabled={isLoading}>
@@ -982,13 +1061,20 @@ Return ONLY RAW HTML. No markdown.
                                 onChange={handleImageSelect}
                             />
 
-                            {(!inputValue && !isLoading && !selectedImage) && (
+                            {(!inputValue && !isLoading && !isEditingElement && !selectedImage && !selectedElementInfo) && (
                                 <div className="animated-placeholder" key={placeholderIndex}>
                                     <span className="placeholder-text">{placeholders[placeholderIndex]}</span>
                                 </div>
                             )}
 
-                            {!isLoading ? (
+                            {selectedElementInfo && focusedArtifactIndex !== null && (
+                                <div className="element-edit-hint">
+                                    <span>✏️ Editing: &lt;{selectedElementInfo.tagName.toLowerCase()}&gt; {selectedElementInfo.snippet ? `"${selectedElementInfo.snippet}${selectedElementInfo.snippet.length >= 40 ? '...' : ''}"` : ''}</span>
+                                    <button onClick={() => setSelectedElementInfo(null)} title="Cancel editing" className="element-edit-dismiss">✕</button>
+                                </div>
+                            )}
+
+                            {!isLoading && !isEditingElement ? (
                                 <div className="input-row">
                                     <button
                                         className={`attach-button ${selectedImage ? 'active' : ''}`}
@@ -1009,18 +1095,18 @@ Return ONLY RAW HTML. No markdown.
                                         onChange={handleInputChange}
                                         onPaste={handlePaste}
                                         onKeyDown={handleKeyDown}
-                                        disabled={isLoading}
+                                        disabled={isLoading || isEditingElement}
                                         rows={1}
-                                        placeholder={!selectedImage ? "" : "Add your menu items or paste an image..."}
+                                        placeholder={selectedElementInfo ? 'Descreva a alteração... ex: "adicionar logo no topo"' : (!selectedImage ? '' : 'Add your menu items or paste an image...')}
                                     />
                                 </div>
                             ) : (
                                 <div className="input-generating-label">
-                                    <span className="generating-prompt-text">Designing Menu...</span>
+                                    <span className="generating-prompt-text">{isEditingElement ? 'Editando elemento...' : 'Designing Menu...'}</span>
                                     <ThinkingIcon />
                                 </div>
                             )}
-                            <button className="send-button" onClick={() => handleSendMessage()} disabled={isLoading || !inputValue.trim()}>
+                            <button className="send-button" onClick={() => handleSendMessage()} disabled={(isLoading || isEditingElement) || !inputValue.trim()}>
                                 <ArrowUpIcon />
                             </button>
                         </div>

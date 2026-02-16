@@ -46,6 +46,7 @@ export const TUTORIAL_STEPS = [
     { target: '.paper-size-select', text: '📄 Selecione o tamanho do papel para impressão.', position: 'top' as const },
     { target: '.style-select', text: '🎨 Escolha cores e fontes para o seu menu.', position: 'top' as const },
     { target: '.send-button', text: '✨ Escreva seus itens de menu e clique para gerar!', position: 'left' as const },
+    { target: '.input-row', text: '✏️ Selecione um elemento no menu e digite para editar — ex: "adicionar logo no topo" ou "mais 4 itens de pizza"', position: 'top' as const },
 ];
 
 export const INJECTED_EDITOR_SCRIPT = `
@@ -332,17 +333,48 @@ export const INJECTED_EDITOR_SCRIPT = `
             sendTree(); syncHtmlBack();
             return;
         }
+
+        // Return outerHTML for the element at path
+        if (data.type === 'GET_ELEMENT_HTML') {
+            var el = getElementByPath(data.path);
+            if (el) {
+                window.parent.postMessage({ type: 'ELEMENT_HTML_RESPONSE', path: data.path, html: el.outerHTML, tagName: el.tagName, snippet: (el.textContent || '').substring(0, 40) }, '*');
+            }
+            return;
+        }
+
+        // Replace element at path with new HTML
+        if (data.type === 'EDIT_ELEMENT') {
+            var el = getElementByPath(data.path);
+            if (el && el.parentElement && data.html) {
+                var wrapper = document.createElement('div');
+                wrapper.innerHTML = data.html;
+                // Insert all new nodes before the old one, then remove old
+                while (wrapper.firstChild) {
+                    el.parentElement.insertBefore(wrapper.firstChild, el);
+                }
+                el.remove();
+                sendTree(); syncHtmlBack();
+            }
+            return;
+        }
     });
 
-    // Report element clicks to parent (for tree panel sync)
+    // Report element clicks to parent (for tree panel sync + contextual editing)
     document.addEventListener('click', function(e) {
         if (e.target.closest('#floating-toolbar')) return;
         if (e.target.closest('.drag-handle')) return;
         var tag = e.target.tagName;
         if (tag === 'SCRIPT' || tag === 'STYLE') return;
-        var path = getElementPath(e.target);
+        var target = e.target;
+        // Walk up to a meaningful element for editing context
+        while (target && target !== document.body && ['SPAN','B','I','U','EM','STRONG','A','BR','SMALL','SUB','SUP'].indexOf(target.tagName) !== -1) {
+            target = target.parentElement;
+        }
+        var path = getElementPath(target);
         if (path.length > 0) {
-            window.parent.postMessage({ type: 'ELEMENT_CLICKED', path: path }, '*');
+            var snippet = (target.textContent || '').substring(0, 40);
+            window.parent.postMessage({ type: 'ELEMENT_CLICKED', path: path, html: target.outerHTML, tagName: target.tagName, snippet: snippet }, '*');
         }
     });
 
