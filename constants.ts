@@ -42,6 +42,19 @@ export const FONTS = [
     "Monospace (Tech, Retro)"
 ];
 
+export const ITEMS_PER_PAGE_LIMITS: Record<string, { min: number; max: number; default: number }> = {
+    'A3': { min: 1, max: 30, default: 12 },
+    'A4': { min: 1, max: 20, default: 8 },
+    'A5': { min: 1, max: 8, default: 5 },
+    'Letter': { min: 1, max: 20, default: 8 },
+};
+
+export const TUTORIAL_STEPS = [
+    { target: '.items-per-page-input', text: '👋 Escolha quantos produtos você quer por página. O layout se ajusta automaticamente!', position: 'top' as const },
+    { target: '.paper-size-select', text: '📄 Selecione o tamanho do papel para impressão.', position: 'top' as const },
+    { target: '.send-button', text: '✨ Escreva seus itens de menu e clique para gerar!', position: 'left' as const },
+];
+
 export const INJECTED_EDITOR_SCRIPT = `
 <script>
 (function() {

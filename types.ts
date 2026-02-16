@@ -11,20 +11,21 @@ export interface Artifact {
 }
 
 export interface PaperSize {
-    name: string;
-    widthMm: number;
-    heightMm: number;
-    cssSize: string;
-    widthPx: number;
-    heightPx: number;
+  name: string;
+  widthMm: number;
+  heightMm: number;
+  cssSize: string;
+  widthPx: number;
+  heightPx: number;
 }
 
 export interface Session {
-    id: string;
-    prompt: string;
-    timestamp: number;
-    artifacts: Artifact[];
-    paperSize: PaperSize;
+  id: string;
+  prompt: string;
+  timestamp: number;
+  artifacts: Artifact[];
+  paperSize: PaperSize;
+  itemsPerPage: number;
 }
 
 export interface ComponentVariation { name: string; html: string; }
